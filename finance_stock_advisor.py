@@ -20,6 +20,7 @@ import hmac
 import base64
 import hashlib
 import logging
+import re
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -171,12 +172,72 @@ def send_dingtalk(text):
         return False
 
 
+# ==================== A 股相关性过滤 ====================
+# A 股股票代码正则：沪市 60xxxx / 深市 00xxxx / 创业板 30xxxx / 科创板 688xxx / 北交所 8xxxxx,4xxxxx
+_A_STOCK_CODE = re.compile(r"(60[0-9]{4}|00[0-9]{4}|30[0-9]{4}|688[0-9]{3}|8[0-9]{5}|4[0-9]{5})")
+
+# 纯外围市场关键词（标题命中即排除）
+_OFFSHORE_KEYWORDS = [
+    "美股", "纳斯达克", "纳指", "道琼斯", "道指", "标普",
+    "港股", "恒生", "恒指", "恒科",
+    "欧股", "日经", "日股", "韩股",
+    "原油", "黄金", "白银", "铜价", "铁矿",
+    "比特币", "加密货币", "以太坊",
+    "美联储", "欧央行", "鲍威尔", "拉加德",
+    "英伟达", "苹果", "特斯拉", "微软", "谷歌", "亚马逊", "奈飞",
+    "盘前", "盘后",
+]
+
+# A 股市场信号词（命中即保留）
+_A_STOCK_SIGNALS = [
+    "A股", "沪深", "创业板", "科创板", "北交所",
+    "上证", "深证", "沪指", "深成指",
+    "涨停", "跌停", "两市", "北向资金",
+    "沪深300", "中证500",
+]
+
+
+def is_a_stock_related(title, content=""):
+    """判断新闻是否和 A 股市场相关，用于过滤纯外围市场新闻。
+    规则: 含 A 股代码/信号 → 保留; 标题含外围关键词 → 排除; 其余 → 保留
+    """
+    text = title + " " + content
+    # 1) 含 A 股股票代码 → 保留
+    if _A_STOCK_CODE.search(text):
+        return True
+    # 2) 含 A 股市场信号词 → 保留
+    if any(kw in text for kw in _A_STOCK_SIGNALS):
+        return True
+    # 3) 标题含纯外围关键词 → 排除
+    if any(kw in title for kw in _OFFSHORE_KEYWORDS):
+        return False
+    # 4) 其余保留 (东财快讯里多数是 A 股公司业绩/公告类新闻)
+    return True
+
+
 # ==================== 新闻获取 ====================
 def fetch_news():
-    """从 akshare 多个免费源抓取财经新闻，任一失败不影响整体"""
+    """抓取财经新闻并过滤为只含 A 股相关内容"""
     news_list = []
+    fetch_limit = NEWS_LIMIT * 2  # 过滤前多抓一些，保证过滤后仍有足够条数
 
-    # 1) 央视新闻联播文字稿（数据稳定）
+    # 东方财富全球财经快讯 (含大量 A 股公司公告 / 业绩预告)
+    try:
+        df = ak.stock_info_global_em()
+        if df is not None and len(df) > 0:
+            for _, row in df.head(fetch_limit).iterrows():
+                title   = row.get("标题")   or row.get("title")   or ""
+                content = row.get("内容")   or row.get("content") or ""
+                if title:
+                    news_list.append({
+                        "title":   str(title),
+                        "content": str(content),
+                        "source":  "东财快讯",
+                    })
+    except Exception as e:
+        log.warning(f"东财快讯获取失败: {e}")
+
+    # 央视新闻联播文字稿 (备源，数据稳定，兜底用)
     try:
         df = ak.news_cctv(date=datetime.now().strftime("%Y%m%d"))
         if df is not None and len(df) > 0:
@@ -189,22 +250,10 @@ def fetch_news():
     except Exception as e:
         log.warning(f"央视新闻获取失败: {e}")
 
-    # 2) 东方财富全球财经快讯
-    try:
-        df = ak.stock_info_global_em()
-        if df is not None and len(df) > 0:
-            for _, row in df.head(NEWS_LIMIT).iterrows():
-                # 字段名可能是中文或英文，兼容处理
-                title   = row.get("标题")   or row.get("title")   or ""
-                content = row.get("内容")   or row.get("content") or ""
-                if title:
-                    news_list.append({
-                        "title":   str(title),
-                        "content": str(content),
-                        "source":  "东财快讯",
-                    })
-    except Exception as e:
-        log.warning(f"东财快讯获取失败: {e}")
+    # 过滤掉纯外围市场新闻，只保留 A 股相关
+    before = len(news_list)
+    news_list = [n for n in news_list if is_a_stock_related(n["title"], n["content"])]
+    log.info(f"A股相关性过滤: {before} → {len(news_list)} 条")
 
     return news_list
 
