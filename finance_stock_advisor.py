@@ -292,7 +292,14 @@ def run_once():
         )
     else:
         push_text += f"今日提示: {reason}\n"
-    push_text += "风险提示: 股市有风险，'一定会涨'不存在，本推荐仅供参考，请理性投资。"
+
+    # 附上今日新闻摘要 (最多 10 条，避免超钉钉单条 20000 字符上限)
+    if news:
+        push_text += "\n--- 今日新闻摘要 ---\n"
+        for i, n in enumerate(news[:10], 1):
+            push_text += f"{i}. {n['title']} [{n['source']}]\n"
+
+    push_text += "\n风险提示: 股市有风险，'一定会涨'不存在，本推荐仅供参考，请理性投资。"
     send_dingtalk(push_text)
 
 
