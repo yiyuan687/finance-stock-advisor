@@ -1,0 +1,31 @@
+name: 每日财经推荐
+
+# 触发方式
+on:
+  schedule:
+    # UTC 00:00 = 北京时间 08:00，每天执行一次
+    # 注: GitHub Actions cron 不保证准点，通常会有几分钟到十几分钟延迟
+    - cron: '0 0 * * *'
+  workflow_dispatch:   # 允许在 GitHub 网页手动触发，用于测试
+
+jobs:
+  advisor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 抓取新闻 + 推荐 + 推送钉钉
+        env:
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_SECRET:  ${{ secrets.DINGTALK_SECRET }}
+        run: python finance_stock_advisor.py --now

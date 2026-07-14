@@ -1,0 +1,14 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 虚拟环境（体积大，不应提交）
+venv/
+
+# 运行输出（每日报告和日志，本地保留即可）
+output/
+
+# IDE
+.vscode/
+.idea/
