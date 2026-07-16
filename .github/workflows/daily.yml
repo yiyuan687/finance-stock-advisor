@@ -1,16 +1,16 @@
 name: 每日财经推荐
 
-# 触发方式
+# 触发方式: 仅 workflow_dispatch (手动/API 触发)
+# 用 cron-job.org 每天 08:00 准时调用 GitHub API 触发，避免 GitHub schedule 延迟
 on:
-  schedule:
-    # UTC 00:00 = 北京时间 08:00，每天执行一次
-    # 注: GitHub Actions cron 不保证准点，通常会有几分钟到十几分钟延迟
-    - cron: '0 0 * * *'
-  workflow_dispatch:   # 允许在 GitHub 网页手动触发，用于测试
+  workflow_dispatch:
 
 jobs:
   advisor:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: finance_stock_advisor
     steps:
       - name: 拉取代码
         uses: actions/checkout@v5
@@ -20,6 +20,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: finance_stock_advisor/requirements.txt
 
       - name: 安装依赖
         run: pip install -r requirements.txt
