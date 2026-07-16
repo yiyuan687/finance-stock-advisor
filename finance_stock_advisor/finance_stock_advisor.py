@@ -22,10 +22,13 @@ import hashlib
 import logging
 import re
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests
+
+# 北京时间 UTC+8 (GitHub Actions runner 默认 UTC，需显式指定)
+_CST = timezone(timedelta(hours=8))
 
 # 定时器（仅本地常驻模式需要，CI 模式不必）
 try:
@@ -239,7 +242,7 @@ def fetch_news():
 
     # 央视新闻联播文字稿 (备源，数据稳定，兜底用)
     try:
-        df = ak.news_cctv(date=datetime.now().strftime("%Y%m%d"))
+        df = ak.news_cctv(date=datetime.now(_CST).strftime("%Y%m%d"))
         if df is not None and len(df) > 0:
             for _, row in df.head(NEWS_LIMIT).iterrows():
                 news_list.append({
@@ -299,7 +302,7 @@ def analyze_and_recommend(news_list):
 
 # ==================== 单次执行 ====================
 def run_once():
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now(_CST).strftime("%Y-%m-%d %H:%M:%S")
     log.info(f"==== 开始执行 {now} ====")
 
     news = fetch_news()
@@ -326,7 +329,7 @@ def run_once():
         "recommendation": rec,
         "reason": reason,
     }
-    out_file = OUTPUT_DIR / f"report_{datetime.now().strftime('%Y%m%d')}.json"
+    out_file = OUTPUT_DIR / f"report_{datetime.now(_CST).strftime('%Y%m%d')}.json"
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     log.info(f"结果已保存: {out_file}")
